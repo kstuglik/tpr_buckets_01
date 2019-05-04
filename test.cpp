@@ -1,7 +1,3 @@
-/*
-g++ test.cpp -o test -fopenmp -Wall
-./test 100 4 100 4 a
-*/
 #include<iostream>
 #include <stdio.h>
 #include <omp.h>
@@ -32,8 +28,7 @@ int* generateData(int numberOfElements,int rangeOfNumbers){
             elements[i] = distr(generator);
         
             cout << "TID: "<<omp_get_thread_num()<<", i: " << i <<", generated: "<<elements[i]<<endl;  
-        }
-            
+        }    
     }
     return elements;
 }
@@ -47,9 +42,9 @@ void print_vector(std::vector<int> const &input)
 
 int main(int argc, const char * argv[]) {
 	
-    if (argc != 6) {
+    if (argc != 5) {
 		cout<< "Provided: " << argc << " arguments"<<endl;
-        cout<< "Please provide 5 arguments [numberOfPoints numberOfBuckets rangeOfNumbers numberOfThreads isScalable]" << endl;
+        cout<< "Please provide 4 arguments [numberOfPoints numberOfBuckets rangeOfNumbers numberOfThreads]" << endl;
         return -1;
     }
     
@@ -60,7 +55,7 @@ int main(int argc, const char * argv[]) {
     
     omp_set_num_threads(numberOfThreads);
     
-    cout<<"|----=---------GENERATE DATA---------------|"<<endl;
+    cout<<"|--------------GENERATE DATA---------------|"<<endl;
     
     double timeGenerateDataStart = omp_get_wtime();
     int* elements = generateData(numberOfPoints, rangeOfNumbers);
@@ -73,47 +68,41 @@ int main(int argc, const char * argv[]) {
     
     cout<<"|--------DIVIDE DATA INTO BUCKETS----------|"<<endl;
 
-    
+    int bucketRange = numberOfPoints/numberOfBuckets;
+    int threadRange = numberOfPoints/numberOfThreads;
+        
     double timeExecStart = omp_get_wtime();
     
     #pragma omp parallel shared(buckets)
     {    
         const int id = omp_get_thread_num();
         
-        #pragma omp parallel for schedule(static)
-        for(int i=id*(numberOfPoints/4);i<((id+1)*(numberOfPoints/4));i++) 
-        {     
-            if(elements[i]>(((rangeOfNumbers/4))*3)){//>75
-                
+        #pragma omp parallel for
+        for(int i=id*threadRange;i<(id+1)*threadRange;i++) 
+        {   
+            if( elements[i] == rangeOfNumbers){
                     #pragma omp critical
                     {
-                        cout << "TID: "<<id<<", buckets[3]: "<<elements[i]<<endl;
-                        buckets[3]->push_back(elements[i]); 
+                        cout << "TID: "<<id<<", buckets["<<numberOfBuckets-1<<"]: "<<elements[i]<<endl;
+                        buckets[numberOfBuckets-1]->push_back(elements[i]);    
+                    }
+            }else{
+                int gdzie = (elements[i]/bucketRange);
+                
+                if(gdzie>numberOfBuckets){
+                    #pragma omp critical
+                    {
+                        cout << "TID: "<<id<<", buckets["<<numberOfBuckets-1<<"]: "<<elements[i]<<endl;
+                        buckets[numberOfBuckets-1]->push_back(elements[i]);   
+                    }  
+                }
+                else{
+                    #pragma omp critical
+                    {
+                        cout << "TID: "<<id<<", buckets["<<gdzie<<"]: "<<elements[i]<<endl;
+                        buckets[gdzie]->push_back(elements[i]); 
                     }
                 }
-            else if(elements[i]>(((rangeOfNumbers/4))*2)){//50
-                
-                #pragma omp critical
-                {
-                    cout << "TID: "<<id<<", buckets[2]: "<<elements[i]<<endl;
-                    buckets[2]->push_back(elements[i]);
-                }
-            }
-            else if(elements[i]>(((rangeOfNumbers/4))*1)){//25
-                
-                #pragma omp critical
-                {
-                    cout << "TID: "<<id<<", buckets[1]: "<<elements[i]<<endl;
-                    buckets[1]->push_back(elements[i]);
-                }
-            }
-            else{
-                                    
-                #pragma omp critical
-                {
-                    cout << "TID: "<<id<<", buckets[0]: "<<elements[i]<<endl;
-                    buckets[0]->push_back(elements[i]);
-                } 
             }
         }    
     }
@@ -126,10 +115,11 @@ int main(int argc, const char * argv[]) {
         const int id = omp_get_thread_num();
         sort(buckets[id]->begin(), buckets[id]->end()); 
     }
+    
     double timeSortBucketStop = stopTimer(timeSortBucketStart);
     
-    for(int p=0;p<4;p++){
-        cout<<"bucket["<<p<<"]:"<<endl;
+    for(int p=0;p<numberOfBuckets;p++){
+        cout<<"bucket["<<p<<"]: ";
         print_vector(*buckets[p]);
         cout<<endl;
     }
@@ -137,18 +127,17 @@ int main(int argc, const char * argv[]) {
     
     vector<int> sortedData;
     sortedData.reserve(numberOfPoints);
-    for(int t=0;t<numberOfThreads;t++)
+    for(int t=0;t<numberOfBuckets;t++)
         copy(buckets[t]->begin(), buckets[t]->end(),back_inserter(sortedData));
     print_vector(sortedData);
     cout<<endl;
-    cout<<"|-------------STATS------------------------|"<<endl; 
-    cout<<"buckets[0]->size():  "<<buckets[0]->size()<<endl;
-    cout<<"buckets[1]->size():  "<<buckets[1]->size()<<endl;
-    cout<<"buckets[2]->size():  "<<buckets[2]->size()<<endl;
-    cout<<"buckets[3]->size():  "<<buckets[3]->size()<<endl;
     cout<<"|------------------------------------------|"<<endl;
     cout<<"sortedData.size():  "<<sortedData.size()<<endl;;
-    cout<<"|------------------------------------------|"<<endl;
+    cout<<"|------------ELEMENTS IN BUCKETS-----------|"<<endl; 
+    for(int p=0;p<numberOfBuckets;p++){
+        cout<<"bucket["<<p<<"]: "<<buckets[p]->size()<<endl;
+    }
+    cout<<"|------------SUMMARY-----------------------|"<<endl;
     cout<<"generateTime: "<<timeGenerateDataStop<<endl;
     cout<<"execTime: "<<timeExecStop<<endl;
     cout<<"sortTime: "<<timeSortBucketStop<<endl;
@@ -156,7 +145,6 @@ int main(int argc, const char * argv[]) {
 	cout<<"numberOfBuckets: "<<numberOfBuckets<<endl;
 	cout<<"rangeOfNumbers: 0-"<<rangeOfNumbers<<endl;
 	cout<<"numberOfThreads: "<<numberOfThreads<<endl;
-	cout<<"other option: "<<argv[5]<<endl;
     cout<<"|------------------------------------------|"<<endl;
     delete[] elements;
 
