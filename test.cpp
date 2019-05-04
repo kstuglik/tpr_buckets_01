@@ -68,7 +68,7 @@ int main(int argc, const char * argv[]) {
     
     cout<<"|--------DIVIDE DATA INTO BUCKETS----------|"<<endl;
 
-    int bucketRange = numberOfPoints/numberOfBuckets;
+    int bucketRange = rangeOfNumbers/numberOfBuckets;
     int threadRange = numberOfPoints/numberOfThreads;
         
     double timeExecStart = omp_get_wtime();
