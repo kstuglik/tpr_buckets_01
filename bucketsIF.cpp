@@ -5,7 +5,8 @@
 #include <ctime>
 #include <vector>
 #include <algorithm>
-
+#include <ctime>
+#include <unistd.h>
 
 using namespace std;
 
@@ -16,7 +17,7 @@ int* generateData(int numberOfElements,int rangeOfNumbers){
     std::random_device rand_dev;
     std::mt19937 generator(rand_dev());
     std::uniform_int_distribution<int>  distr(0, rangeOfNumbers);
-    #pragma omp parallel for 
+    #pragma omp parallel for
     for(int i=0;i<numberOfElements;i++){
         elements[i] = distr(generator);
     }
@@ -46,6 +47,13 @@ int main(int argc, const char * argv[]) {
     
     omp_set_num_threads(numberOfThreads);
     
+    int bucketRange = rangeOfNumbers/numberOfBuckets;
+    int threadRange = numberOfPoints/numberOfThreads;
+
+    omp_lock_t writeLock;
+    omp_init_lock(&writeLock);
+    
+    
 //    cout<<"|--------------GENERATE DATA---------------|"<<endl;
     
     double timeGenerateDataStart = omp_get_wtime();
@@ -59,32 +67,34 @@ int main(int argc, const char * argv[]) {
     
 //    cout<<"|--------DIVIDE DATA INTO BUCKETS----------|"<<endl;
 
-    int bucketRange = rangeOfNumbers/numberOfBuckets;
-    int threadRange = numberOfPoints/numberOfThreads;
-        
     double timeExecStart = omp_get_wtime();
     
     #pragma omp parallel for schedule(static,threadRange)
     for(int i=0;i<numberOfPoints;i++) 
     {   
         if( elements[i] == rangeOfNumbers){
-                #pragma omp critical
-                    buckets[numberOfBuckets-1]->push_back(elements[i]);    
-        }else{
-            int gdzie = (elements[i]/bucketRange);
+            omp_set_lock(&writeLock);
+            buckets[numberOfBuckets-1]->push_back(elements[i]);  
+            omp_unset_lock(&writeLock); 
+        }
+        else{
+            int idOfBucket = (elements[i]/bucketRange);
 
-            if(gdzie>numberOfBuckets){
-                #pragma omp critical
-                    buckets[numberOfBuckets-1]->push_back(elements[i]);     
+            if(idOfBucket>numberOfBuckets){
+                omp_set_lock(&writeLock);
+                buckets[numberOfBuckets-1]->push_back(elements[i]);  
+                omp_unset_lock(&writeLock);  
             }
             else{
-                #pragma omp critical
-                    buckets[gdzie]->push_back(elements[i]); 
+                omp_set_lock(&writeLock);
+                buckets[idOfBucket]->push_back(elements[i]);  
+                omp_unset_lock(&writeLock);
             }
         }
     }    
   
     double timeExecStop = stopTimer(timeExecStart);
+//    cout<<"|------------SORTED BUCKETS----------------|"<<endl; 
 
     double timeSortBucketStart = omp_get_wtime();
     
@@ -93,9 +103,8 @@ int main(int argc, const char * argv[]) {
         const int id = omp_get_thread_num();
         sort(buckets[id]->begin(), buckets[id]->end()); 
     }
-    
     double timeSortBucketStop = stopTimer(timeSortBucketStart);
-
+//    cout<<"|-------MERGE BUCKETS INTO sortedData------|"<<endl; 
     vector<int> sortedData;
     sortedData.reserve(numberOfPoints);
     for(int t=0;t<numberOfBuckets;t++)
@@ -104,4 +113,5 @@ int main(int argc, const char * argv[]) {
     cout<<numberOfPoints<<"     "<<numberOfBuckets<<"    "<<rangeOfNumbers<<"    "<<numberOfThreads<<"    "<<timeExecStop<<"    "
         <<timeGenerateDataStop<<"    "<<timeSortBucketStop<<endl;
     delete[] elements;
+    omp_destroy_lock(&writeLock);
 }
