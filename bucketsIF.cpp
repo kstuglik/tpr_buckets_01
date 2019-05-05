@@ -31,8 +31,6 @@ void print_vector(std::vector<int> const &input){
 }
 
 int main(int argc, const char * argv[]) {
-	omp_lock_t writelock;
-    omp_init_lock(&writelock);
     
     if (argc != 5) {
 		cout<< "Provided: " << argc << " arguments"<<endl;
