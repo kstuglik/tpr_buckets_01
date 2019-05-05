@@ -32,9 +32,9 @@ void print_vector(std::vector<int> const &input){
 
 int main(int argc, const char * argv[]) {
     
-    if (argc != 5) {
+    if (argc != 6) {
 		cout<< "Provided: " << argc << " arguments"<<endl;
-        cout<< "Please provide 4 arguments [numberOfPoints numberOfBuckets rangeOfNumbers numberOfThreads]" << endl;
+        cout<< "Please provide 5 arguments [numberOfPoints numberOfBuckets rangeOfNumbers numberOfThreads scalable]" << endl;
         return -1;
     }
     
@@ -42,33 +42,29 @@ int main(int argc, const char * argv[]) {
     int numberOfBuckets = atoi(argv[2]);
     int rangeOfNumbers = atoi(argv[3]);
     int numberOfThreads = atoi(argv[4]);
+    if(string(argv[5])=="scalable") {
+        points = numberOfPoints * numberOfThreads;
+    }
     
-    omp_set_num_threads(numberOfThreads);
-    
-    int bucketRange = rangeOfNumbers/numberOfBuckets;
-    int threadRange = numberOfPoints/numberOfThreads;
-
-    omp_lock_t writeLock;
-    omp_init_lock(&writeLock);
-    
-    
-//    cout<<"|--------------GENERATE DATA---------------|"<<endl;
-    
-    double timeGenerateDataStart = omp_get_wtime();
-    int* elements = generateData(numberOfPoints, rangeOfNumbers);
-    double timeGenerateDataStop = stopTimer(timeGenerateDataStart);
+    int* elements = generateData(points, rangeOfNumbers);
     
     vector<int>* buckets[numberOfBuckets];
     for(int i=0; i<numberOfBuckets; i++) {
         buckets[i] = new vector<int>();
     }
     
-//    cout<<"|--------DIVIDE DATA INTO BUCKETS----------|"<<endl;
+    omp_lock_t writeLock;
+    omp_init_lock(&writeLock);
+    omp_set_num_threads(numberOfThreads);
+    
+    int bucketRange = rangeOfNumbers/numberOfBuckets;
+    int threadRange = numberOfPoints/numberOfThreads;
+    int points = numberOfPoints;
 
     double timeExecStart = omp_get_wtime();
-    
+
     #pragma omp parallel for schedule(static,threadRange)
-    for(int i=0;i<numberOfPoints;i++) 
+    for(int i=0;i<points;i++) 
     {   
         if( elements[i] == rangeOfNumbers){
             omp_set_lock(&writeLock);
@@ -89,27 +85,24 @@ int main(int argc, const char * argv[]) {
                 omp_unset_lock(&writeLock);
             }
         }
-    }    
-  
-    double timeExecStop = stopTimer(timeExecStart);
-//    cout<<"|------------SORTED BUCKETS----------------|"<<endl; 
-
-    double timeSortBucketStart = omp_get_wtime();
+    }
     
     #pragma omp parallel
     {
         const int id = omp_get_thread_num();
         sort(buckets[id]->begin(), buckets[id]->end()); 
     }
-    double timeSortBucketStop = stopTimer(timeSortBucketStart);
-//    cout<<"|-------MERGE BUCKETS INTO sortedData------|"<<endl; 
+    
+    double timeExecStop = stopTimer(timeExecStart);
+
     vector<int> sortedData;
     sortedData.reserve(numberOfPoints);
+    
     for(int t=0;t<numberOfBuckets;t++)
         copy(buckets[t]->begin(), buckets[t]->end(),back_inserter(sortedData));
 
-    cout<<numberOfPoints<<"     "<<numberOfBuckets<<"    "<<rangeOfNumbers<<"    "<<numberOfThreads<<"    "<<timeExecStop<<"    "
-        <<timeGenerateDataStop<<"    "<<timeSortBucketStop<<endl;
+    cout<<numberOfPoints<<"     "<<numberOfBuckets<<"    "<<rangeOfNumbers<<"    "<<numberOfThreads<<"    "<<timeExecStop<<endl;
+    
     delete[] elements;
     omp_destroy_lock(&writeLock);
 }
