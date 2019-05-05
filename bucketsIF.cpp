@@ -1,14 +1,10 @@
 #include<iostream>
 #include <stdio.h>
 #include <omp.h>
-//////////////////
-#include <random> // for std::mt19937
-#include <ctime> // for std::time
- ////////////////////////////
+#include <random>
+#include <ctime>
 #include <vector>
-/////////////////////////////
 #include <algorithm>
-/////////////////////////////
 
 
 using namespace std;
@@ -22,26 +18,21 @@ int* generateData(int numberOfElements,int rangeOfNumbers){
     std::uniform_int_distribution<int>  distr(0, rangeOfNumbers);
     #pragma omp parallel for 
     for(int i=0;i<numberOfElements;i++){
-            
-        #pragma omp critical
-        {
-            elements[i] = distr(generator);
-        
-            cout << "TID: "<<omp_get_thread_num()<<", i: " << i <<", generated: "<<elements[i]<<endl;  
-        }    
+        elements[i] = distr(generator);
     }
     return elements;
 }
 
-void print_vector(std::vector<int> const &input)
-{
+void print_vector(std::vector<int> const &input){
     for (auto const& i: input) {
         std::cout << i << " ";
     }
 }
 
 int main(int argc, const char * argv[]) {
-	
+	omp_lock_t writelock;
+    omp_init_lock(&writelock);
+    
     if (argc != 5) {
 		cout<< "Provided: " << argc << " arguments"<<endl;
         cout<< "Please provide 4 arguments [numberOfPoints numberOfBuckets rangeOfNumbers numberOfThreads]" << endl;
@@ -55,7 +46,7 @@ int main(int argc, const char * argv[]) {
     
     omp_set_num_threads(numberOfThreads);
     
-    cout<<"|--------------GENERATE DATA---------------|"<<endl;
+//    cout<<"|--------------GENERATE DATA---------------|"<<endl;
     
     double timeGenerateDataStart = omp_get_wtime();
     int* elements = generateData(numberOfPoints, rangeOfNumbers);
@@ -66,48 +57,37 @@ int main(int argc, const char * argv[]) {
         buckets[i] = new vector<int>();
     }
     
-    cout<<"|--------DIVIDE DATA INTO BUCKETS----------|"<<endl;
+//    cout<<"|--------DIVIDE DATA INTO BUCKETS----------|"<<endl;
 
     int bucketRange = rangeOfNumbers/numberOfBuckets;
     int threadRange = numberOfPoints/numberOfThreads;
         
     double timeExecStart = omp_get_wtime();
     
-
-        
     #pragma omp parallel for schedule(static,threadRange)
     for(int i=0;i<numberOfPoints;i++) 
     {   
         if( elements[i] == rangeOfNumbers){
                 #pragma omp critical
-                {
-                    cout << "TID: "<<omp_get_thread_num()<<", buckets["<<numberOfBuckets-1<<"]: "<<elements[i]<<endl;
                     buckets[numberOfBuckets-1]->push_back(elements[i]);    
-                }
         }else{
             int gdzie = (elements[i]/bucketRange);
 
             if(gdzie>numberOfBuckets){
                 #pragma omp critical
-                {
-                    cout << "TID: "<<omp_get_thread_num()<<", buckets["<<numberOfBuckets-1<<"]: "<<elements[i]<<endl;
-                    buckets[numberOfBuckets-1]->push_back(elements[i]);   
-                }  
+                    buckets[numberOfBuckets-1]->push_back(elements[i]);     
             }
             else{
                 #pragma omp critical
-                {
-                    cout << "TID: "<<omp_get_thread_num()<<", buckets["<<gdzie<<"]: "<<elements[i]<<endl;
                     buckets[gdzie]->push_back(elements[i]); 
-                }
             }
         }
     }    
-
-        
+  
     double timeExecStop = stopTimer(timeExecStart);
-    cout<<"|------------SORTED BUCKETS----------------|"<<endl; 
+
     double timeSortBucketStart = omp_get_wtime();
+    
     #pragma omp parallel
     {
         const int id = omp_get_thread_num();
@@ -115,36 +95,13 @@ int main(int argc, const char * argv[]) {
     }
     
     double timeSortBucketStop = stopTimer(timeSortBucketStart);
-    
-    for(int p=0;p<numberOfBuckets;p++){
-        cout<<"bucket["<<p<<"]: ";
-        print_vector(*buckets[p]);
-        cout<<endl;
-    }
-    cout<<"|-------MERGE BUCKETS INTO sortedData------|"<<endl; 
-    
+
     vector<int> sortedData;
     sortedData.reserve(numberOfPoints);
     for(int t=0;t<numberOfBuckets;t++)
         copy(buckets[t]->begin(), buckets[t]->end(),back_inserter(sortedData));
-    print_vector(sortedData);
-    cout<<endl;
-    cout<<"|------------------------------------------|"<<endl;
-    cout<<"sortedData.size():  "<<sortedData.size()<<endl;;
-    cout<<"|------------ELEMENTS IN BUCKETS-----------|"<<endl; 
-    for(int p=0;p<numberOfBuckets;p++){
-        cout<<"bucket["<<p<<"]: "<<buckets[p]->size()<<endl;
-    }
-    cout<<"|------------SUMMARY-----------------------|"<<endl;
-    cout<<"generateTime: "<<timeGenerateDataStop<<endl;
-    cout<<"execTime: "<<timeExecStop<<endl;
-    cout<<"sortTime: "<<timeSortBucketStop<<endl;
-	cout<<"numberOfPoints: "<<numberOfPoints<<endl;
-	cout<<"numberOfBuckets: "<<numberOfBuckets<<endl;
-	cout<<"rangeOfNumbers: 0-"<<rangeOfNumbers<<endl;
-	cout<<"numberOfThreads: "<<numberOfThreads<<endl;
-    cout<<"|------------------------------------------|"<<endl;
-    delete[] elements;
 
-    return 0;
+    cout<<numberOfPoints<<"     "<<numberOfBuckets<<"    "<<rangeOfNumbers<<"    "<<numberOfThreads<<"    "<<timeExecStop<<"    "
+        <<timeGenerateDataStop<<"    "<<timeSortBucketStop<<endl;
+    delete[] elements;
 }
