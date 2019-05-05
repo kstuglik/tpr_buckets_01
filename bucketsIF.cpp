@@ -42,6 +42,8 @@ int main(int argc, const char * argv[]) {
     int numberOfBuckets = atoi(argv[2]);
     int rangeOfNumbers = atoi(argv[3]);
     int numberOfThreads = atoi(argv[4]);
+    int points = numberOfPoints;
+    
     if(string(argv[5])=="scalable") {
         points = numberOfPoints * numberOfThreads;
     }
@@ -59,11 +61,12 @@ int main(int argc, const char * argv[]) {
     
     int bucketRange = rangeOfNumbers/numberOfBuckets;
     int threadRange = numberOfPoints/numberOfThreads;
-    int points = numberOfPoints;
+    int step = numberOfBuckets/numberOfThreads;
 
     double timeExecStart = omp_get_wtime();
 
-    #pragma omp parallel for schedule(static,threadRange)
+    #pragma omp parallel shared(buckets) 
+    #pragma omp for schedule(static,threadRange)
     for(int i=0;i<points;i++) 
     {   
         if( elements[i] == rangeOfNumbers){
@@ -87,11 +90,10 @@ int main(int argc, const char * argv[]) {
         }
     }
     
-    #pragma omp parallel
-    {
-        const int id = omp_get_thread_num();
-        sort(buckets[id]->begin(), buckets[id]->end()); 
-    }
+    
+    #pragma omp parallel for
+    for(int i=omp_get_thread_num()*step;i<(omp_get_thread_num()*step+step);i++)
+        sort(buckets[i]->begin(), buckets[i]->end()); 
     
     double timeExecStop = stopTimer(timeExecStart);
 
