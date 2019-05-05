@@ -69,7 +69,7 @@ int main(int argc, const char * argv[]) {
     #pragma omp for schedule(static,threadRange)
     for(int i=0;i<points;i++) 
     {   
-        if( elements[i] == rangeOfNumbers){
+        if( elements[i] == rangeOfNumbers || numberOfBuckets==1){
             omp_set_lock(&writeLock);
             buckets[numberOfBuckets-1]->push_back(elements[i]);  
             omp_unset_lock(&writeLock); 
@@ -77,7 +77,7 @@ int main(int argc, const char * argv[]) {
         else{
             int idOfBucket = (elements[i]/bucketRange);
 
-            if(idOfBucket>numberOfBuckets){
+            if(idOfBucket>=numberOfBuckets){
                 omp_set_lock(&writeLock);
                 buckets[numberOfBuckets-1]->push_back(elements[i]);  
                 omp_unset_lock(&writeLock);  
